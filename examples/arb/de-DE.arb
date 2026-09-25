@@ -1,0 +1,32 @@
+{
+  "@@locale": "de-DE",
+  "@cart.items": {
+    "description": "Cart summary with a count",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@footer.note": {
+    "description": "Footer note"
+  },
+  "@help.text": {
+    "description": "Help link text"
+  },
+  "@page.heading": {
+    "description": "Page heading"
+  },
+  "@page.intro": {
+    "description": "Intro paragraph"
+  },
+  "@page.title": {
+    "description": "Browser tab title"
+  },
+  "cart.items": "Sie haben {count} Artikel im Warenkorb.",
+  "footer.note": "Erstellt mit localize.",
+  "help.text": "Read the guide",
+  "page.heading": "Eine Arbeitsmappe, viele Sprachen",
+  "page.intro": "Bearbeiten Sie die Arbeitsmappe, importieren Sie sie und erzeugen Sie die Laufzeitdateien.",
+  "page.title": "Localize-Demo"
+}

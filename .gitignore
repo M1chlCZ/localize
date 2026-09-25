@@ -1,0 +1,7 @@
+/bin/
+/localize
+.lock
+.store-*
+.localization-*
+.idea/
+.DS_Store

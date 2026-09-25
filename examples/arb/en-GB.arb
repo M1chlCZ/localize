@@ -1,0 +1,32 @@
+{
+  "@@locale": "en-GB",
+  "@cart.items": {
+    "description": "Cart summary with a count",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "@footer.note": {
+    "description": "Footer note"
+  },
+  "@help.text": {
+    "description": "Help link text"
+  },
+  "@page.heading": {
+    "description": "Page heading"
+  },
+  "@page.intro": {
+    "description": "Intro paragraph"
+  },
+  "@page.title": {
+    "description": "Browser tab title"
+  },
+  "cart.items": "You have {count} items in the cart.",
+  "footer.note": "Built with localize.",
+  "help.text": "Read the guide",
+  "page.heading": "One workbook, many languages",
+  "page.intro": "Edit the workbook, import it, and generate the runtime files.",
+  "page.title": "Localize demo"
+}
