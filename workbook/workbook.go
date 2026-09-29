@@ -114,8 +114,8 @@ func Decode(reader io.Reader) (Workbook, error) {
 	if err != nil {
 		return Workbook{}, err
 	}
-	if err := Validate(item); err != nil {
-		return Workbook{}, err
+	if validationErr := Validate(item); validationErr != nil {
+		return Workbook{}, validationErr
 	}
 	return item, nil
 }
@@ -253,14 +253,14 @@ func styleTable(file *excelize.File, sheet, lastColumn string) error {
 	if err != nil {
 		return fmt.Errorf("create workbook header style: %w", err)
 	}
-	if err := file.SetCellStyle(sheet, "A1", lastColumn+"1", style); err != nil {
-		return fmt.Errorf("style %s header: %w", sheet, err)
+	if styleErr := file.SetCellStyle(sheet, "A1", lastColumn+"1", style); styleErr != nil {
+		return fmt.Errorf("style %s header: %w", sheet, styleErr)
 	}
-	if err := file.SetPanes(
+	if paneErr := file.SetPanes(
 		sheet,
 		&excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"},
-	); err != nil {
-		return fmt.Errorf("freeze %s header: %w", sheet, err)
+	); paneErr != nil {
+		return fmt.Errorf("freeze %s header: %w", sheet, paneErr)
 	}
 	_ = file.SetColWidth(sheet, "A", lastColumn, defaultColumnWidth)
 	return nil

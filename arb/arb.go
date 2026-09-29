@@ -49,13 +49,18 @@ func Generate(item workbook.Workbook) ([]Artifact, error) {
 		defaultPlaceholders[key.Name] = placeholders(defaultMessages[key.Name])
 	}
 
-	artifacts := make([]Artifact, 0, len(locales)+2)
+	artifacts := make([]Artifact, 0, len(locales))
 	for _, locale := range locales {
 		messages, messageErr := messagesForLocale(locale.Code, keys, translations, localeIndex)
 		if messageErr != nil {
 			return nil, messageErr
 		}
-		if placeholderErr := validatePlaceholders(locale.Code, keys, messages, defaultPlaceholders); placeholderErr != nil {
+		if placeholderErr := validatePlaceholders(
+			locale.Code,
+			keys,
+			messages,
+			defaultPlaceholders,
+		); placeholderErr != nil {
 			return nil, placeholderErr
 		}
 		content, marshalErr := marshalARB(locale.Code, keys, messages, defaultPlaceholders)

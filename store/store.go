@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -79,8 +80,8 @@ func Merge(state State, incoming workbook.Workbook) (State, int64, error) {
 	}
 	translationChanges := mergeTranslations(&next, incoming.Translations)
 	changes += translationChanges
-	if err := validateCoverage(next); err != nil {
-		return State{}, 0, err
+	if coverageErr := validateCoverage(next); coverageErr != nil {
+		return State{}, 0, coverageErr
 	}
 	next.Revision++
 	return next, changes, nil
@@ -109,7 +110,10 @@ func mergeLocales(next *State, incoming []workbook.Locale) (int64, error) {
 		}
 	}
 	next.Locales = slices.Clone(incoming)
-	slices.SortFunc(next.Locales, func(left, right workbook.Locale) int { return strings.Compare(left.Code, right.Code) })
+	slices.SortFunc(
+		next.Locales,
+		func(left, right workbook.Locale) int { return strings.Compare(left.Code, right.Code) },
+	)
 	return changes, nil
 }
 
@@ -172,9 +176,7 @@ func cloneTranslations(source map[string]map[string]string) map[string]map[strin
 	result := make(map[string]map[string]string, len(source))
 	for locale, values := range source {
 		copied := make(map[string]string, len(values))
-		for key, value := range values {
-			copied[key] = value
-		}
+		maps.Copy(copied, values)
 		result[locale] = copied
 	}
 	return result

@@ -1,16 +1,19 @@
-package store
+package store_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/m1chlcz/localize/store"
 	"github.com/m1chlcz/localize/workbook"
 )
 
-func testState() State {
-	return State{
+func testState() store.State {
+	return store.State{
 		Version:  workbook.Version,
 		Revision: 4,
 		Locales: []workbook.Locale{
@@ -31,13 +34,9 @@ func testState() State {
 func TestMergeUpdatesTranslationsAndBumpsRevision(t *testing.T) {
 	t.Parallel()
 	state := testState()
-	incoming := Snapshot(state)
-	for index := range incoming.Translations {
-		if incoming.Translations[index].Locale == "de-DE" && incoming.Translations[index].Key == "page.title" {
-			incoming.Translations[index].Translation = "Guten Tag"
-		}
-	}
-	next, changes, err := Merge(state, incoming)
+	incoming := store.Snapshot(state)
+	setTranslation(&incoming, "de-DE", "page.title", "Guten Tag")
+	next, changes, err := store.Merge(state, incoming)
 	if err != nil {
 		t.Fatalf("merge: %v", err)
 	}
@@ -87,9 +86,9 @@ func TestMergeRejectsUnsafeWorkbooks(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			incoming := Snapshot(state)
+			incoming := store.Snapshot(state)
 			test.mutate(&incoming)
-			if _, _, err := Merge(state, incoming); err == nil {
+			if _, _, err := store.Merge(state, incoming); err == nil {
 				t.Fatalf("merge accepted %s", test.name)
 			}
 		})
@@ -99,14 +98,14 @@ func TestMergeRejectsUnsafeWorkbooks(t *testing.T) {
 func TestMergeDeletesTranslations(t *testing.T) {
 	t.Parallel()
 	state := testState()
-	incoming := Snapshot(state)
+	incoming := store.Snapshot(state)
 	for index := range incoming.Translations {
 		if incoming.Translations[index].Locale == "de-DE" && incoming.Translations[index].Key == "page.subtitle" {
 			incoming.Translations[index].Translation = ""
 			incoming.Translations[index].Status = workbook.StatusDelete
 		}
 	}
-	next, changes, err := Merge(state, incoming)
+	next, changes, err := store.Merge(state, incoming)
 	if err != nil {
 		t.Fatalf("merge: %v", err)
 	}
@@ -121,53 +120,73 @@ func TestMergeDeletesTranslations(t *testing.T) {
 func TestJSONStoreRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "store.json")
-	if err := (JSONStore{Path: path}).save(testState()); err != nil {
-		t.Fatalf("save store: %v", err)
-	}
+	writeStore(t, path, testState())
 	ctx := context.Background()
-	snapshot, err := (JSONStore{Path: path}).Snapshot(ctx)
-	if err != nil {
-		t.Fatalf("snapshot: %v", err)
-	}
+	snapshot := snapshotStore(t, path)
 	if snapshot.Revision != 4 || len(snapshot.Translations) != 4 {
 		t.Fatalf("snapshot = %#v", snapshot)
 	}
-	for index := range snapshot.Translations {
-		if snapshot.Translations[index].Locale == "de-DE" && snapshot.Translations[index].Key == "page.title" {
-			snapshot.Translations[index].Translation = "Servus"
-		}
-	}
-	result, err := (JSONStore{Path: path}).Apply(ctx, snapshot, false)
+	setTranslation(&snapshot, "de-DE", "page.title", "Servus")
+	result, err := (store.JSONStore{Path: path}).Apply(ctx, snapshot, false)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if !result.Applied || result.Changes != 1 || result.Revision != 5 {
 		t.Fatalf("result = %#v", result)
 	}
-	updated, err := (JSONStore{Path: path}).Snapshot(ctx)
-	if err != nil {
-		t.Fatalf("snapshot again: %v", err)
-	}
+	updated := snapshotStore(t, path)
 	if updated.Revision != 5 {
 		t.Fatalf("updated revision = %d", updated.Revision)
 	}
-	var german string
-	for _, item := range updated.Translations {
-		if item.Locale == "de-DE" && item.Key == "page.title" {
-			german = item.Translation
-		}
-	}
-	if german != "Servus" {
+	if german := translationValue(updated, "de-DE", "page.title"); german != "Servus" {
 		t.Fatalf("updated snapshot = %#v", updated)
 	}
-	if _, err := (JSONStore{Path: path}).Apply(ctx, snapshot, false); !errors.Is(err, ErrStale) {
-		t.Fatalf("stale apply error = %v", err)
+	if _, applyErr := (store.JSONStore{Path: path}).Apply(ctx, snapshot, false); !errors.Is(applyErr, store.ErrStale) {
+		t.Fatalf("stale apply error = %v", applyErr)
 	}
-	dryRun, err := (JSONStore{Path: path}).Apply(ctx, updated, true)
+	dryRun, err := (store.JSONStore{Path: path}).Apply(ctx, updated, true)
 	if err != nil {
 		t.Fatalf("dry-run: %v", err)
 	}
 	if dryRun.Applied || dryRun.Changes != 0 {
 		t.Fatalf("dry-run result = %#v", dryRun)
 	}
+}
+
+func writeStore(t *testing.T, path string, state store.State) {
+	t.Helper()
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal store: %v", err)
+	}
+	data = append(data, '\n')
+	if writeErr := os.WriteFile(path, data, 0o600); writeErr != nil {
+		t.Fatalf("write store: %v", writeErr)
+	}
+}
+
+func snapshotStore(t *testing.T, path string) workbook.Workbook {
+	t.Helper()
+	snapshot, err := (store.JSONStore{Path: path}).Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	return snapshot
+}
+
+func setTranslation(item *workbook.Workbook, locale, key, value string) {
+	for index := range item.Translations {
+		if item.Translations[index].Locale == locale && item.Translations[index].Key == key {
+			item.Translations[index].Translation = value
+		}
+	}
+}
+
+func translationValue(item workbook.Workbook, locale, key string) string {
+	for _, translation := range item.Translations {
+		if translation.Locale == locale && translation.Key == key {
+			return translation.Translation
+		}
+	}
+	return ""
 }

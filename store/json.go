@@ -13,13 +13,16 @@ import (
 	"github.com/m1chlcz/localize/workbook"
 )
 
-const maxStoreBytes = 16 << 20
+const (
+	maxStoreBytes = 16 << 20
+	storeFileMode = 0o600
+)
 
 type JSONStore struct {
 	Path string
 }
 
-func (s JSONStore) Snapshot(ctx context.Context) (workbook.Workbook, error) {
+func (s JSONStore) Snapshot(_ context.Context) (workbook.Workbook, error) {
 	state, err := s.load()
 	if err != nil {
 		return workbook.Workbook{}, err
@@ -27,16 +30,16 @@ func (s JSONStore) Snapshot(ctx context.Context) (workbook.Workbook, error) {
 	return Snapshot(state), nil
 }
 
-func (s JSONStore) Apply(ctx context.Context, incoming workbook.Workbook, dryRun bool) (Result, error) {
+func (s JSONStore) Apply(_ context.Context, incoming workbook.Workbook, dryRun bool) (Result, error) {
 	var result Result
 	err := s.withLock(func() error {
-		state, err := s.load()
-		if err != nil {
-			return err
+		state, loadErr := s.load()
+		if loadErr != nil {
+			return loadErr
 		}
-		next, changes, err := Merge(state, incoming)
-		if err != nil {
-			return err
+		next, changes, mergeErr := Merge(state, incoming)
+		if mergeErr != nil {
+			return mergeErr
 		}
 		result = Result{Applied: !dryRun, Changes: changes, Revision: next.Revision}
 		if dryRun {
@@ -64,7 +67,7 @@ func (s JSONStore) load() (State, error) {
 		return State{}, errors.New("store is too large")
 	}
 	var state State
-	if err := json.Unmarshal(data, &state); err != nil {
+	if unmarshalErr := json.Unmarshal(data, &state); unmarshalErr != nil {
 		return State{}, errors.New("store is not valid JSON")
 	}
 	if state.Version != workbook.Version {
@@ -73,8 +76,8 @@ func (s JSONStore) load() (State, error) {
 	if state.Revision < 1 {
 		return State{}, errors.New("store revision must be positive")
 	}
-	if err := workbook.Validate(Snapshot(state)); err != nil {
-		return State{}, fmt.Errorf("store is invalid: %w", err)
+	if validationErr := workbook.Validate(Snapshot(state)); validationErr != nil {
+		return State{}, fmt.Errorf("store is invalid: %w", validationErr)
 	}
 	return state, nil
 }
@@ -92,23 +95,23 @@ func (s JSONStore) save(state State) error {
 	}
 	path := temporary.Name()
 	defer func() { _ = os.Remove(path) }()
-	if _, err := temporary.Write(data); err != nil {
+	if _, writeErr := temporary.Write(data); writeErr != nil {
 		_ = temporary.Close()
-		return fmt.Errorf("write store: %w", err)
+		return fmt.Errorf("write store: %w", writeErr)
 	}
-	if err := temporary.Sync(); err != nil {
+	if syncErr := temporary.Sync(); syncErr != nil {
 		_ = temporary.Close()
-		return fmt.Errorf("sync store: %w", err)
+		return fmt.Errorf("sync store: %w", syncErr)
 	}
-	if err := temporary.Chmod(0o600); err != nil {
+	if chmodErr := temporary.Chmod(storeFileMode); chmodErr != nil {
 		_ = temporary.Close()
-		return fmt.Errorf("set store permissions: %w", err)
+		return fmt.Errorf("set store permissions: %w", chmodErr)
 	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close store: %w", err)
+	if closeErr := temporary.Close(); closeErr != nil {
+		return fmt.Errorf("close store: %w", closeErr)
 	}
-	if err := os.Rename(path, s.Path); err != nil {
-		return fmt.Errorf("publish store: %w", err)
+	if renameErr := os.Rename(path, s.Path); renameErr != nil {
+		return fmt.Errorf("publish store: %w", renameErr)
 	}
 	handle, err := os.Open(directory)
 	if err != nil {
@@ -123,14 +126,14 @@ func (s JSONStore) withLock(run func() error) error {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return fmt.Errorf("create store directory: %w", err)
 	}
-	lock, err := os.OpenFile(filepath.Join(directory, ".lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	lock, err := os.OpenFile(filepath.Join(directory, ".lock"), os.O_CREATE|os.O_RDWR, storeFileMode)
 	if err != nil {
 		return fmt.Errorf("open store lock: %w", err)
 	}
 	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return fmt.Errorf("lock store: %w", err)
+	if lockErr := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); lockErr != nil {
+		return fmt.Errorf("lock store: %w", lockErr)
 	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
 	return run()
 }

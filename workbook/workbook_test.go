@@ -1,4 +1,4 @@
-package workbook
+package workbook_test
 
 import (
 	"bytes"
@@ -6,18 +6,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/m1chlcz/localize/workbook"
 	"github.com/xuri/excelize/v2"
 )
+
+const translationsSheet = "Translations"
 
 func TestWorkbookRoundTripPreservesLanguageColumns(t *testing.T) {
 	t.Parallel()
 	want := validWorkbook()
 	want.ExportedAt = "2026-08-14T17:00:00Z"
 	var encoded bytes.Buffer
-	if err := Encode(&encoded, want); err != nil {
+	if err := workbook.Encode(&encoded, want); err != nil {
 		t.Fatalf("encode workbook: %v", err)
 	}
-	got, err := Decode(bytes.NewReader(encoded.Bytes()))
+	got, err := workbook.Decode(bytes.NewReader(encoded.Bytes()))
 	if err != nil {
 		t.Fatalf("decode workbook: %v", err)
 	}
@@ -34,7 +37,7 @@ func TestWorkbookRoundTripPreservesLanguageColumns(t *testing.T) {
 func TestWorkbookWritesTranslationsSideBySide(t *testing.T) {
 	t.Parallel()
 	var encoded bytes.Buffer
-	if err := Encode(&encoded, validWorkbook()); err != nil {
+	if err := workbook.Encode(&encoded, validWorkbook()); err != nil {
 		t.Fatalf("encode workbook: %v", err)
 	}
 	file, err := excelize.OpenReader(bytes.NewReader(encoded.Bytes()))
@@ -68,7 +71,7 @@ func TestDecodeRejectsFormulaCells(t *testing.T) {
 	if err := file.Write(&encoded); err != nil {
 		t.Fatalf("write workbook: %v", err)
 	}
-	_, err := Decode(bytes.NewReader(encoded.Bytes()))
+	_, err := workbook.Decode(bytes.NewReader(encoded.Bytes()))
 	if err == nil || !strings.Contains(err.Error(), "formula") {
 		t.Fatalf("Decode() error = %v, want formula rejection", err)
 	}

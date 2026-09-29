@@ -69,20 +69,24 @@ func TestExamplesRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read example store: %v", err)
 	}
-	if err := os.WriteFile(storePath, source, 0o600); err != nil {
-		t.Fatalf("copy example store: %v", err)
+	if writeErr := os.WriteFile(storePath, source, 0o600); writeErr != nil {
+		t.Fatalf("copy example store: %v", writeErr)
 	}
 
 	var validateOutput bytes.Buffer
-	if err := execute(context.Background(), []string{"validate", "--input", workbookPath}, &validateOutput); err != nil {
-		t.Fatalf("validate example: %v", err)
+	if validateErr := execute(
+		context.Background(),
+		[]string{"validate", "--input", workbookPath},
+		&validateOutput,
+	); validateErr != nil {
+		t.Fatalf("validate example: %v", validateErr)
 	}
 
 	var importOutput bytes.Buffer
-	if err := execute(context.Background(), []string{
+	if importErr := execute(context.Background(), []string{
 		"import", "--store", storePath, "--input", workbookPath, "--dry-run",
-	}, &importOutput); err != nil {
-		t.Fatalf("dry-run example: %v", err)
+	}, &importOutput); importErr != nil {
+		t.Fatalf("dry-run example: %v", importErr)
 	}
 	if !strings.Contains(importOutput.String(), "dry-run 0 changes") {
 		t.Fatalf("dry-run output = %q", importOutput.String())
@@ -90,10 +94,10 @@ func TestExamplesRoundTrip(t *testing.T) {
 
 	generated := t.TempDir()
 	var generateOutput bytes.Buffer
-	if err := execute(context.Background(), []string{
+	if generateErr := execute(context.Background(), []string{
 		"generate", "--input", workbookPath, "--output-dir", generated,
-	}, &generateOutput); err != nil {
-		t.Fatalf("generate example: %v", err)
+	}, &generateOutput); generateErr != nil {
+		t.Fatalf("generate example: %v", generateErr)
 	}
 	entries, err := os.ReadDir(filepath.Join(root, "arb"))
 	if err != nil {
@@ -103,13 +107,13 @@ func TestExamplesRoundTrip(t *testing.T) {
 		t.Fatalf("example artifact count = %d, want 4", len(entries))
 	}
 	for _, entry := range entries {
-		want, err := os.ReadFile(filepath.Join(root, "arb", entry.Name()))
-		if err != nil {
-			t.Fatalf("read committed %s: %v", entry.Name(), err)
+		want, wantErr := os.ReadFile(filepath.Join(root, "arb", entry.Name()))
+		if wantErr != nil {
+			t.Fatalf("read committed %s: %v", entry.Name(), wantErr)
 		}
-		got, err := os.ReadFile(filepath.Join(generated, entry.Name()))
-		if err != nil {
-			t.Fatalf("read generated %s: %v", entry.Name(), err)
+		got, gotErr := os.ReadFile(filepath.Join(generated, entry.Name()))
+		if gotErr != nil {
+			t.Fatalf("read generated %s: %v", entry.Name(), gotErr)
 		}
 		if !bytes.Equal(got, want) {
 			t.Fatalf("%s is stale; run localize generate again", entry.Name())
@@ -123,12 +127,12 @@ func writeTestWorkbook(t *testing.T, path string) {
 	if err != nil {
 		t.Fatalf("create workbook: %v", err)
 	}
-	if err := workbook.Encode(file, commandTestWorkbook()); err != nil {
+	if encodeErr := workbook.Encode(file, commandTestWorkbook()); encodeErr != nil {
 		_ = file.Close()
-		t.Fatalf("encode workbook: %v", err)
+		t.Fatalf("encode workbook: %v", encodeErr)
 	}
-	if err := file.Close(); err != nil {
-		t.Fatalf("close workbook: %v", err)
+	if closeErr := file.Close(); closeErr != nil {
+		t.Fatalf("close workbook: %v", closeErr)
 	}
 }
 
@@ -143,8 +147,20 @@ func commandTestWorkbook() workbook.Workbook {
 			{Name: "page.title", Context: "Page title", Required: true},
 		},
 		Translations: []workbook.Translation{
-			{Key: "page.title", Locale: "en-GB", Translation: "Welcome", Context: "Page title", Status: workbook.StatusTranslated},
-			{Key: "page.title", Locale: "de-DE", Translation: "Willkommen", Context: "Page title", Status: workbook.StatusTranslated},
+			{
+				Key:         "page.title",
+				Locale:      "en-GB",
+				Translation: "Welcome",
+				Context:     "Page title",
+				Status:      workbook.StatusTranslated,
+			},
+			{
+				Key:         "page.title",
+				Locale:      "de-DE",
+				Translation: "Willkommen",
+				Context:     "Page title",
+				Status:      workbook.StatusTranslated,
+			},
 		},
 	}
 }

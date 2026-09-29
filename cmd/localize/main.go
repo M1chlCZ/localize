@@ -25,12 +25,17 @@ const (
 const usageMessage = "usage: localize export|validate|generate|import [options]"
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := execute(ctx, os.Args[1:], os.Stdout); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func execute(ctx context.Context, args []string, output io.Writer) error {
@@ -65,8 +70,8 @@ func exportCommand(ctx context.Context, args []string, output io.Writer) error {
 		return err
 	}
 	snapshot.ExportedAt = time.Now().UTC().Format(time.RFC3339)
-	if err := writeWorkbook(*path, snapshot, *force); err != nil {
-		return err
+	if writeErr := writeWorkbook(*path, snapshot, *force); writeErr != nil {
+		return writeErr
 	}
 	_, _ = fmt.Fprintf(output, "exported revision %d to %s\n", snapshot.Revision, *path)
 	return nil
@@ -103,8 +108,8 @@ func generateCommand(args []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err := writeArtifacts(*outputDirectory, artifacts); err != nil {
-		return err
+	if writeErr := writeArtifacts(*outputDirectory, artifacts); writeErr != nil {
+		return writeErr
 	}
 	_, _ = fmt.Fprintf(output, "generated %d localization artifacts in %s\n", len(artifacts), *outputDirectory)
 	return nil
@@ -177,23 +182,23 @@ func writeWorkbook(path string, item workbook.Workbook, force bool) error {
 	}
 	temporaryPath := temporary.Name()
 	defer func() { _ = os.Remove(temporaryPath) }()
-	if err := workbook.Encode(temporary, item); err != nil {
+	if encodeErr := workbook.Encode(temporary, item); encodeErr != nil {
 		_ = temporary.Close()
-		return err
+		return encodeErr
 	}
-	if err := temporary.Sync(); err != nil {
+	if syncErr := temporary.Sync(); syncErr != nil {
 		_ = temporary.Close()
-		return fmt.Errorf("sync workbook: %w", err)
+		return fmt.Errorf("sync workbook: %w", syncErr)
 	}
-	if err := temporary.Chmod(fileMode); err != nil {
+	if chmodErr := temporary.Chmod(fileMode); chmodErr != nil {
 		_ = temporary.Close()
-		return fmt.Errorf("set workbook permissions: %w", err)
+		return fmt.Errorf("set workbook permissions: %w", chmodErr)
 	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close workbook: %w", err)
+	if closeErr := temporary.Close(); closeErr != nil {
+		return fmt.Errorf("close workbook: %w", closeErr)
 	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return fmt.Errorf("publish workbook: %w", err)
+	if renameErr := os.Rename(temporaryPath, path); renameErr != nil {
+		return fmt.Errorf("publish workbook: %w", renameErr)
 	}
 	return nil
 }
@@ -217,23 +222,23 @@ func writeArtifacts(directory string, artifacts []arb.Artifact) error {
 				_ = os.Remove(temporaryPath)
 			}
 		}()
-		if _, err := temporary.Write(artifact.Content); err != nil {
+		if _, writeErr := temporary.Write(artifact.Content); writeErr != nil {
 			_ = temporary.Close()
-			return fmt.Errorf("write generated artifact %s: %w", artifact.Path, err)
+			return fmt.Errorf("write generated artifact %s: %w", artifact.Path, writeErr)
 		}
-		if err := temporary.Sync(); err != nil {
+		if syncErr := temporary.Sync(); syncErr != nil {
 			_ = temporary.Close()
-			return fmt.Errorf("sync generated artifact %s: %w", artifact.Path, err)
+			return fmt.Errorf("sync generated artifact %s: %w", artifact.Path, syncErr)
 		}
-		if err := temporary.Chmod(fileMode); err != nil {
+		if chmodErr := temporary.Chmod(fileMode); chmodErr != nil {
 			_ = temporary.Close()
-			return fmt.Errorf("set generated artifact permissions: %w", err)
+			return fmt.Errorf("set generated artifact permissions: %w", chmodErr)
 		}
-		if err := temporary.Close(); err != nil {
-			return fmt.Errorf("close generated artifact %s: %w", artifact.Path, err)
+		if closeErr := temporary.Close(); closeErr != nil {
+			return fmt.Errorf("close generated artifact %s: %w", artifact.Path, closeErr)
 		}
-		if err := os.Rename(temporaryPath, filepath.Join(directory, artifact.Path)); err != nil {
-			return fmt.Errorf("publish generated artifact %s: %w", artifact.Path, err)
+		if renameErr := os.Rename(temporaryPath, filepath.Join(directory, artifact.Path)); renameErr != nil {
+			return fmt.Errorf("publish generated artifact %s: %w", artifact.Path, renameErr)
 		}
 		published = true
 	}
