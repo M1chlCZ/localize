@@ -435,9 +435,6 @@ func boundedRows(file *excelize.File, sheet string) ([][]string, error) {
 }
 
 func equalRow(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
 	return slices.Equal(got, want)
 }
 
