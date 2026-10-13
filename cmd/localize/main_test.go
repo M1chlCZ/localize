@@ -60,6 +60,45 @@ func TestExecuteRejectsAmbiguousImportMode(t *testing.T) {
 	}
 }
 
+func TestExecuteRequiresExactlyOneStoreSource(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "translations.xlsx")
+	writeTestWorkbook(t, path)
+	for _, args := range [][]string{
+		{"export", "--output", path},
+		{
+			"export",
+			"--store", "store.json",
+			"--database-url", "postgres://example.invalid/shop",
+			"--output", path,
+		},
+		{"import", "--input", path, "--dry-run"},
+		{
+			"import",
+			"--store", "store.json",
+			"--database-url", "postgres://example.invalid/shop",
+			"--input", path,
+			"--dry-run",
+		},
+	} {
+		if err := execute(context.Background(), args, &bytes.Buffer{}); err == nil {
+			t.Fatalf("execute(%v) accepted an ambiguous store source", args)
+		}
+	}
+}
+
+func TestExecuteRejectsMalformedDatabaseURL(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "translations.xlsx")
+	writeTestWorkbook(t, path)
+	err := execute(context.Background(), []string{
+		"export", "--database-url", "postgres://invalid host/shop", "--output", path,
+	}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "localization database") {
+		t.Fatalf("export error = %v", err)
+	}
+}
+
 func TestExamplesRoundTrip(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join("..", "..", "examples")

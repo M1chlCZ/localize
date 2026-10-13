@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/m1chlcz/localize/arb"
+	"github.com/m1chlcz/localize/postgres"
 	"github.com/m1chlcz/localize/store"
 	"github.com/m1chlcz/localize/workbook"
 )
@@ -60,12 +61,29 @@ func exportCommand(ctx context.Context, args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("localize export", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	storePath := flags.String("store", "", "path to the JSON store")
+	databaseURL := flags.String("database-url", "", "PostgreSQL database URL")
 	path := flags.String("output", "", "output XLSX path")
 	force := flags.Bool("force", false, "replace an existing output file")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *storePath == "" || *path == "" {
-		return errors.New("usage: localize export --store FILE.json --output FILE.xlsx [--force]")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *path == "" ||
+		(*storePath == "") == (*databaseURL == "") {
+		return errors.New(
+			"usage: localize export (--store FILE.json|--database-url URL) --output FILE.xlsx [--force]",
+		)
 	}
-	snapshot, err := store.JSONStore{Path: *storePath}.Snapshot(ctx)
+	var (
+		snapshot workbook.Workbook
+		err      error
+	)
+	if *databaseURL != "" {
+		pool, openErr := postgres.Open(ctx, *databaseURL)
+		if openErr != nil {
+			return openErr
+		}
+		defer pool.Close()
+		snapshot, err = postgres.Export(ctx, pool)
+	} else {
+		snapshot, err = store.JSONStore{Path: *storePath}.Snapshot(ctx)
+	}
 	if err != nil {
 		return err
 	}
@@ -119,11 +137,15 @@ func importCommand(ctx context.Context, args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("localize import", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	storePath := flags.String("store", "", "path to the JSON store")
+	databaseURL := flags.String("database-url", "", "PostgreSQL database URL")
 	path := flags.String("input", "", "input XLSX path")
 	dryRun := flags.Bool("dry-run", false, "validate against the store and stop")
 	apply := flags.Bool("apply", false, "apply the workbook to the store")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *storePath == "" || *path == "" {
-		return errors.New("usage: localize import --store FILE.json --input FILE.xlsx (--dry-run|--apply)")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *path == "" ||
+		(*storePath == "") == (*databaseURL == "") {
+		return errors.New(
+			"usage: localize import (--store FILE.json|--database-url URL) --input FILE.xlsx (--dry-run|--apply)",
+		)
 	}
 	if *dryRun == *apply {
 		return errors.New("import requires exactly one of --dry-run or --apply")
@@ -132,7 +154,19 @@ func importCommand(ctx context.Context, args []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	result, err := store.JSONStore{Path: *storePath}.Apply(ctx, item, *dryRun)
+	label := "store"
+	var result store.Result
+	if *databaseURL != "" {
+		label = "database"
+		pool, openErr := postgres.Open(ctx, *databaseURL)
+		if openErr != nil {
+			return openErr
+		}
+		defer pool.Close()
+		result, err = postgres.Apply(ctx, pool, item, *dryRun)
+	} else {
+		result, err = store.JSONStore{Path: *storePath}.Apply(ctx, item, *dryRun)
+	}
 	if err != nil {
 		return err
 	}
@@ -140,7 +174,7 @@ func importCommand(ctx context.Context, args []string, output io.Writer) error {
 	if result.Applied {
 		mode = "applied"
 	}
-	_, _ = fmt.Fprintf(output, "%s %d changes; store revision %d\n", mode, result.Changes, result.Revision)
+	_, _ = fmt.Fprintf(output, "%s %d changes; %s revision %d\n", mode, result.Changes, label, result.Revision)
 	return nil
 }
 

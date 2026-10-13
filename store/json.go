@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/m1chlcz/localize/workbook"
 )
@@ -131,9 +130,9 @@ func (s JSONStore) withLock(run func() error) error {
 		return fmt.Errorf("open store lock: %w", err)
 	}
 	defer lock.Close()
-	if lockErr := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); lockErr != nil {
+	if lockErr := lockFile(lock); lockErr != nil {
 		return fmt.Errorf("lock store: %w", lockErr)
 	}
-	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
+	defer unlockFile(lock)
 	return run()
 }
